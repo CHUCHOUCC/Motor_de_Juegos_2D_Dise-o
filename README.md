@@ -4,7 +4,7 @@
 
 Motor de juegos 2D de plataformas que funciona en el navegador. El diseñador arma proyectos, escenas y objetos, y les agrega componentes como física, colisiones, controles o puntos. Después prueba la escena en modo juego, y el backend es quien calcula la gravedad, los choques y el resultado de la partida.
 
-> **Estado:** análisis, diseño (5 vistas de arquitectura) e implementación **completos**. Se ejecuta en local.
+> **Estado:** análisis, diseño (5 vistas de arquitectura) e implementación **completos**. Se ejecuta en local o desplegado en Render con MongoDB Atlas (ver [Despliegue](#despliegue-en-la-nube-render--mongodb-atlas)).
 > - **Backend:** Java 21 con Spring Boot 4.2, en [`backend/`](backend/).
 > - **Frontend:** HTML + JavaScript, en [`frontend/`](frontend/).
 > - **Base de datos:** MongoDB (local o Atlas).
@@ -120,6 +120,40 @@ Al arrancar por primera vez se crea el proyecto de ejemplo **"Demo de plataforma
 
 ---
 
+## Despliegue en la nube (Render + MongoDB Atlas)
+
+Para usar PixelForge sin instalar nada, solo con el navegador, se despliega como **un solo servicio web en [Render](https://render.com)** y con la base de datos en **[MongoDB Atlas](https://www.mongodb.com/atlas)**. Ambos tienen plan gratis. No hace falta un hosting aparte para el frontend: el mismo backend entrega `index.html`.
+
+```
+Navegador ──HTTPS──▶ Render (Docker: pixelforge.jar + frontend/) ──TLS──▶ MongoDB Atlas
+```
+
+| Archivo | Para qué |
+|---|---|
+| [`render.yaml`](render.yaml) | Blueprint de Render: servicio Docker, plan free, variable `MONGODB_URI`, health check en `/api/catalog` |
+| [`backend/Dockerfile`](backend/Dockerfile) | Compila con Maven (corre las pruebas) y arma una imagen con el JRE 21, el `.jar` y `frontend/` |
+| [`.dockerignore`](.dockerignore) | Deja fuera de la imagen `.git`, los diagramas y lo compilado |
+| [`.gitattributes`](.gitattributes) | Mantiene `mvnw` con saltos de línea de Linux aunque se haga commit desde Windows |
+
+**1. Base de datos en MongoDB Atlas**
+
+1. Crear un clúster gratis (M0).
+2. En *Database Access*, crear un usuario con contraseña.
+3. En *Network Access*, permitir `0.0.0.0/0` (Render no tiene IP fija en el plan gratis).
+4. En *Connect → Drivers*, copiar la cadena `mongodb+srv://usuario:clave@cluster.../`. La base `pixelforge` se crea sola al guardar el primer proyecto.
+
+**2. Servicio en Render**
+
+1. En Render: *New → Blueprint* y conectar este repositorio de GitHub. Render lee `render.yaml`.
+2. Cuando pida `MONGODB_URI`, pegar la cadena de Atlas y aplicar.
+3. Esperar el primer build (unos minutos: descarga Maven, compila y corre las pruebas). La URL queda como `https://pixelforge-xxxx.onrender.com`.
+
+Cada `git push` a `main` vuelve a desplegar solo (`autoDeploy: true`).
+
+Limitaciones del plan gratis de Render: el servicio se duerme tras un rato sin visitas y la primera petición después tarda en despertar (del orden de un minuto). Las partidas en curso viven en memoria y se pierden si el servicio se reinicia; los proyectos no, porque están en Atlas.
+
+---
+
 ## Diagramas
 
 Los diagramas se hicieron en Visual Paradigm. En [`diagramas/visual-paradigm/`](diagramas/visual-paradigm/) están las exportaciones en PNG, y en [`diagramas/fuentes/`](diagramas/fuentes/) los proyectos editables (`.vpp`).
@@ -186,8 +220,9 @@ Todo corre en el PC del usuario. El navegador se comunica por HTTP en `localhost
 
 ```
 ├── README.md
+├── render.yaml                # Despliegue en Render (Blueprint)
 ├── backend/                   # API REST Spring Boot (Java 21 + Maven)
-│   ├── pom.xml · mvnw · mvnw.cmd · run.ps1 · test.ps1
+│   ├── pom.xml · mvnw · mvnw.cmd · run.ps1 · test.ps1 · Dockerfile
 │   ├── src/main/resources/application.properties
 │   └── src/
 │       ├── main/java/com/pixelforge/

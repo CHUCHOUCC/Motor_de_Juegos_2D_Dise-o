@@ -1,0 +1,14 @@
+# Blueprint de Render: un solo servicio web (el backend Spring Boot también sirve el frontend).
+# La base de datos es MongoDB Atlas; su cadena de conexión se pone en MONGODB_URI desde el panel de Render.
+services:
+  - type: web
+    name: pixelforge
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+    healthCheckPath: /api/catalog
+    autoDeploy: true

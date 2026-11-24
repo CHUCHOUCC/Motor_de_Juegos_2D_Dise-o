@@ -1,0 +1,8 @@
+.git
+backend/target
+backend/data
+backend/lib
+backend/out
+diagramas
+*.vpp
+*.bak_*

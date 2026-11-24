@@ -1,0 +1,4 @@
+# mvnw se ejecuta en Linux (Docker/Render): debe quedar con saltos de línea LF aunque se haga commit desde Windows
+/backend/mvnw text eol=lf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
