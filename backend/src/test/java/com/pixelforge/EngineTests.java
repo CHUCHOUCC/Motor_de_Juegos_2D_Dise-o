@@ -18,59 +18,29 @@ import com.pixelforge.runtime.GameSession;
 import com.pixelforge.runtime.GameStatus;
 import com.pixelforge.runtime.PhysicsSystem;
 import com.pixelforge.runtime.SessionRegistry;
-import com.pixelforge.web.Json;
+import com.pixelforge.web.ProjectApiController;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pruebas del motor sin librerías externas: cada método lanza un error si algo falla.
- * Se ejecuta con: java -cp out com.pixelforge.EngineTests
+ * Pruebas del motor con JUnit 5. Se ejecutan con: .\mvnw.cmd test (no necesitan MongoDB encendido).
  */
-public class EngineTests {
-  private static int passed;
-
-  public static void main(String[] args) throws Exception {
-    run("La escena crea objetos solo dentro de sus límites", EngineTests::sceneCreatesObjectsInsideBounds);
-    run("Dos objetos que se tocan se superponen", EngineTests::objectsKnowWhenTheyOverlap);
-    run("El jugador cae y queda sobre el suelo", EngineTests::playerLandsOnTheFloor);
-    run("Solo se salta estando en el suelo", EngineTests::jumpOnlyFromTheGround);
-    run("Recoger todas las monedas gana la partida", EngineTests::collectingEveryCoinWins);
-    run("Tocar un peligro pierde la partida", EngineTests::touchingAHazardLoses);
-    run("Caer fuera de la escena pierde la partida", EngineTests::fallingOffLoses);
-    run("Jugar no cambia la escena del editor", EngineTests::playingDoesNotChangeTheScene);
-    run("Una escena sin jugador no se puede jugar", EngineTests::sceneWithoutPlayerCannotStart);
-    run("El repositorio de archivos conserva los proyectos", EngineTests::fileRepositoryKeepsProjects);
-    run("Un proyecto pasa a documento de MongoDB y vuelve igual", EngineTests::mongoDocumentRoundTrip);
-    run("Los errores de búsqueda son NotFoundException", EngineTests::missingThingsAreNotFound);
-    run("La fábrica rechaza tipos desconocidos", EngineTests::factoryRejectsUnknownTypes);
-    run("El JSON escapa comillas y saltos de línea", EngineTests::jsonEscapesText);
-    System.out.println(passed + " pruebas pasaron");
-  }
-
-  interface Check {
-    void run() throws Exception;
-  }
-
-  private static void run(String name, Check check) throws Exception {
-    check.run();
-    passed++;
-    System.out.println("OK  " + name);
-  }
+class EngineTests {
 
   private static void expect(boolean condition, String message) {
-    if (!condition) throw new AssertionError(message);
+    assertTrue(condition, message);
   }
 
-  private static void expectThrows(Class<? extends Throwable> kind, Check check) throws Exception {
-    try {
-      check.run();
-    } catch (Throwable error) {
-      if (kind.isInstance(error)) return;
-      throw new AssertionError("Se esperaba " + kind.getSimpleName() + " y llegó " + error);
-    }
-    throw new AssertionError("Se esperaba " + kind.getSimpleName());
+  private static void expectThrows(Class<? extends Throwable> kind, Executable check) {
+    assertThrows(kind, check);
   }
 
   // ---------- Ayudas ----------
@@ -98,7 +68,9 @@ public class EngineTests {
 
   // ---------- Pruebas ----------
 
-  static void sceneCreatesObjectsInsideBounds() throws Exception {
+  @Test
+  @DisplayName("La escena crea objetos solo dentro de sus límites")
+  void sceneCreatesObjectsInsideBounds() {
     Project project = new Project("p", "Juego");
     Scene scene = project.createScene("Nivel", 320, 240, 1000, "#000000");
     GameObject box = scene.createObject("Caja", new Vector2(10, 10), new Vector2(20, 20));
@@ -106,7 +78,9 @@ public class EngineTests {
     expectThrows(IllegalArgumentException.class, () -> scene.createObject("Fuera", new Vector2(310, 10), new Vector2(20, 20)));
   }
 
-  static void objectsKnowWhenTheyOverlap() {
+  @Test
+  @DisplayName("Dos objetos que se tocan se superponen")
+  void objectsKnowWhenTheyOverlap() {
     Scene scene = new Project("p", "Juego").createScene("Nivel", 320, 240, 1000, "#000000");
     GameObject a = scene.createObject("A", new Vector2(0, 0), new Vector2(20, 20));
     GameObject b = scene.createObject("B", new Vector2(10, 10), new Vector2(20, 20));
@@ -115,7 +89,9 @@ public class EngineTests {
     expect(!a.overlaps(c), "A y C están lejos");
   }
 
-  static void playerLandsOnTheFloor() {
+  @Test
+  @DisplayName("El jugador cae y queda sobre el suelo")
+  void playerLandsOnTheFloor() {
     EditorController editor = editor();
     GameSession session = play(editor, level(editor));
     frames(session, 60, InputState.NONE);
@@ -124,7 +100,9 @@ public class EngineTests {
     expect(player.getComponent(RigidBody.class).orElseThrow().grounded(), "Debe estar en el suelo");
   }
 
-  static void jumpOnlyFromTheGround() {
+  @Test
+  @DisplayName("Solo se salta estando en el suelo")
+  void jumpOnlyFromTheGround() {
     EditorController editor = editor();
     GameSession session = play(editor, level(editor));
     frames(session, 60, InputState.NONE);
@@ -139,7 +117,9 @@ public class EngineTests {
     expect(player.top() < during + 50, "Sigue en el aire");
   }
 
-  static void collectingEveryCoinWins() {
+  @Test
+  @DisplayName("Recoger todas las monedas gana la partida")
+  void collectingEveryCoinWins() {
     EditorController editor = editor();
     String[] ids = level(editor);
     editor.createObject(ids[0], ids[1], "Moneda", "coin", 120, 280, 24, 24);
@@ -149,7 +129,9 @@ public class EngineTests {
     expect(session.status() == GameStatus.WON, "Debe ganar al no quedar monedas");
   }
 
-  static void touchingAHazardLoses() {
+  @Test
+  @DisplayName("Tocar un peligro pierde la partida")
+  void touchingAHazardLoses() {
     EditorController editor = editor();
     String[] ids = level(editor);
     editor.createObject(ids[0], ids[1], "Pinchos", "spikes", 120, 300, 64, 20);
@@ -159,7 +141,9 @@ public class EngineTests {
     expect(session.status() == GameStatus.LOST, "Debe perder al tocar los pinchos");
   }
 
-  static void fallingOffLoses() {
+  @Test
+  @DisplayName("Caer fuera de la escena pierde la partida")
+  void fallingOffLoses() {
     EditorController editor = editor();
     Project project = editor.createProject("Vacío");
     Scene scene = editor.createScene(project.id(), "Sin suelo", 640, 360, 1400, "#87ceeb");
@@ -169,7 +153,9 @@ public class EngineTests {
     expect(session.status() == GameStatus.LOST, "Debe perder al caer fuera de la escena");
   }
 
-  static void playingDoesNotChangeTheScene() {
+  @Test
+  @DisplayName("Jugar no cambia la escena del editor")
+  void playingDoesNotChangeTheScene() {
     EditorController editor = editor();
     String[] ids = level(editor);
     GameSession session = play(editor, ids);
@@ -178,14 +164,18 @@ public class EngineTests {
     expect(saved.position().equals(new Vector2(40, 200)), "La escena guardada no debe moverse: " + saved.position());
   }
 
-  static void sceneWithoutPlayerCannotStart() throws Exception {
+  @Test
+  @DisplayName("Una escena sin jugador no se puede jugar")
+  void sceneWithoutPlayerCannotStart() {
     EditorController editor = editor();
     Project project = editor.createProject("Sin jugador");
     Scene scene = editor.createScene(project.id(), "Nivel", 640, 360, 1400, "#87ceeb");
     expectThrows(IllegalArgumentException.class, () -> play(editor, new String[] {project.id(), scene.id()}));
   }
 
-  static void fileRepositoryKeepsProjects() throws Exception {
+  @Test
+  @DisplayName("El repositorio de archivos conserva los proyectos")
+  void fileRepositoryKeepsProjects() throws Exception {
     Path file = Files.createTempDirectory("pixelforge").resolve("data.dat");
     EditorController first = new EditorController(new FileProjectRepository(file), new ComponentFactory());
     String[] ids = level(first);
@@ -198,7 +188,9 @@ public class EngineTests {
         "Debe recuperar el color cambiado");
   }
 
-  static void mongoDocumentRoundTrip() {
+  @Test
+  @DisplayName("Un proyecto pasa a documento de MongoDB y vuelve igual")
+  void mongoDocumentRoundTrip() {
     EditorController editor = editor();
     String[] ids = level(editor);
     editor.createObject(ids[0], ids[1], "Enemigo", "enemy", 200, 288, 32, 32);
@@ -224,23 +216,32 @@ public class EngineTests {
     }
   }
 
-  static void missingThingsAreNotFound() throws Exception {
+  @Test
+  @DisplayName("Los errores de búsqueda son NotFoundException")
+  void missingThingsAreNotFound() {
     EditorController editor = editor();
     expectThrows(NotFoundException.class, () -> editor.project("no-existe"));
     String[] ids = level(editor);
     expectThrows(NotFoundException.class, () -> editor.deleteObject(ids[0], ids[1], "no-existe"));
   }
 
-  static void factoryRejectsUnknownTypes() throws Exception {
+  @Test
+  @DisplayName("La fábrica rechaza tipos desconocidos")
+  void factoryRejectsUnknownTypes() {
     ComponentFactory factory = new ComponentFactory();
     expectThrows(IllegalArgumentException.class, () -> factory.create("Volar", Map.of()));
     expect(factory.create("Collectible", Map.of("points", "25")).properties().get("points").equals(25), "Usa los puntos dados");
     expect(factory.preset("player").size() == 4, "El jugador nace con 4 componentes");
   }
 
-  static void jsonEscapesText() {
-    String json = Json.write(Map.of("text", "dice \"hola\"\nadiós", "list", List.of(1, 2.5, true)));
-    expect(json.contains("\\\"hola\\\"") && json.contains("\\n"), "Debe escapar: " + json);
-    expect(json.contains("[1,2.5,true]"), "Debe escribir la lista: " + json);
+  @Test
+  @DisplayName("La API devuelve vistas y rechaza campos vacíos")
+  void apiReturnsViewsAndRejectsMissingFields() {
+    EditorController editor = editor();
+    ProjectApiController api = new ProjectApiController(editor);
+    Map<String, Object> project = api.createProject("  Mi juego  ");
+    expect("Mi juego".equals(project.get("name")), "Debe guardar el nombre sin espacios: " + project.get("name"));
+    expect(api.listProjects().size() == 1, "La lista debe tener el proyecto creado");
+    expectThrows(IllegalArgumentException.class, () -> api.createProject(" "));
   }
 }

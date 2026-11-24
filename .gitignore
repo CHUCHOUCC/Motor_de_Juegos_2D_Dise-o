@@ -1,3 +1,4 @@
+backend/target/
 backend/out/
 backend/data/
 backend/lib/
@@ -7,3 +8,7 @@ backend/lib/
 *.iml
 .DS_Store
 Thumbs.db
+
+# Respaldos automáticos de Visual Paradigm
+*.bak_*
+*.vpp.lck
