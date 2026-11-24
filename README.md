@@ -1,29 +1,56 @@
-# PixelForge · Motor de juegos 2D (Diseño de Software)
+# Motor de juegos 2D "PIXELFORGE"
 
-Editor de juegos de plataformas en el navegador. El backend es **Java 21**, sin Maven ni frameworks, y guarda los proyectos en **MongoDB**. El frontend es un solo archivo HTML.
+**Proyecto Final — Diseño de Software**
 
-## Requisitos
+Motor de juegos 2D de plataformas que funciona en el navegador. El diseñador arma proyectos, escenas y objetos, y les agrega componentes como física, colisiones, controles o puntos. Después prueba la escena en modo juego, y el backend es quien calcula la gravedad, los choques y el resultado de la partida.
 
-1. **JDK 21.**
-2. **MongoDB.** Tienes dos opciones:
-   - Instalar MongoDB Community Server en tu PC (https://www.mongodb.com/try/download/community). En Windows queda como servicio en `localhost:27017`, así que no hay que configurar nada.
-   - Usar MongoDB Atlas (gratis, en la nube) y poner su cadena de conexión antes de arrancar: `$env:MONGODB_URI = "mongodb+srv://usuario:clave@cluster.../"`
-3. Internet la primera vez: `run.ps1` descarga el driver oficial de MongoDB para Java (4 jars) en `backend/lib/`.
+> **Estado:** análisis, diseño (5 vistas de arquitectura) e implementación **completos**. Se ejecuta en local.
+> - **Backend:** Java 21, sin frameworks, en [`backend/`](backend/).
+> - **Frontend:** HTML + JavaScript, en [`frontend/`](frontend/).
+> - **Base de datos:** MongoDB (local o Atlas).
+> - **Diagramas:** Visual Paradigm, en [`diagramas/`](diagramas/).
 
-## Cómo ejecutarlo (Windows, PowerShell)
+---
 
-```powershell
-cd PixelForge\backend
-.\run.ps1                 # MongoDB en localhost:27017 · abre http://localhost:8080
-.\run.ps1 -Storage file   # sin MongoDB: guarda en backend\data\pixelforge.dat
-.\test.ps1                # 14 pruebas (no necesitan MongoDB encendido)
-```
+## Actores
 
-Si PowerShell bloquea los scripts, ejecuta primero: `Set-ExecutionPolicy -Scope Process Bypass`.
+| Actor | Tipo | Objetivo principal |
+|---|---|---|
+| Diseñador de juegos | Primario | Crear proyectos, escenas y objetos, y configurar sus componentes |
+| Jugador | Primario | Jugar una escena con el teclado (izquierda, derecha, saltar) |
+| Operador del servidor | Secundario | Arrancar el servidor (`run.ps1`) y elegir puerto y almacenamiento |
+| Servidor MongoDB | Sistema externo | Guardar y devolver los proyectos como documentos |
 
-Al arrancar por primera vez se crea el proyecto de ejemplo "Demo de plataformas". Para ver los datos, abre **MongoDB Compass** y conéctate a `mongodb://localhost:27017`: base `pixelforge`, colección `projects`.
+---
 
-## Cómo se guarda en MongoDB
+## Alcance
+
+| Módulo | Qué incluye |
+|---|---|
+| Proyectos | Crear, listar, renombrar y eliminar proyectos |
+| Escenas | Crear, editar (tamaño, gravedad, fondo) y eliminar escenas de un proyecto |
+| Objetos | Crear objetos desde plantillas (jugador, plataforma, moneda, enemigo, pinchos), moverlos con el ratón, redimensionarlos y eliminarlos |
+| Componentes | `Sprite`, `RigidBody`, `BoxCollider`, `PlayerController`, `Patrol`, `Collectible` y `Hazard`, que se agregan o quitan de cada objeto |
+| Modo juego | El navegador envía las teclas y el backend calcula física, colisiones, puntos y resultado. Se gana recogiendo todas las monedas y se pierde al tocar un peligro o al caer de la escena |
+| Persistencia | Un documento de MongoDB por proyecto. Como alternativa sin MongoDB, se puede guardar en un archivo |
+
+Queda **fuera del alcance**: usuarios e inicio de sesión, editor de imágenes o sonido, animaciones por cuadros, exportar el juego como ejecutable y juego en línea entre varias personas.
+
+---
+
+## Backend (código fuente)
+
+La carpeta [`backend/`](backend/) contiene el servidor en **Java 21**. No usa Maven ni frameworks: el servidor HTTP es el que trae el JDK (`com.sun.net.httpserver`), y la única librería externa es el driver oficial de MongoDB. El código está organizado en las capas de la vista de desarrollo:
+
+| Paquete | Capa |
+|---|---|
+| `com.pixelforge.web` | Presentación: rutas de la API, lectura de peticiones, JSON y entrega del HTML |
+| `com.pixelforge.application` | Aplicación: controladores GRASP de los casos de uso (`EditorController`, `PlayController`) |
+| `com.pixelforge.runtime` | Ejecución del juego: partida, física y registro de sesiones |
+| `com.pixelforge.domain` / `.component` | Modelo de dominio: proyecto, escena, objeto y componentes |
+| `com.pixelforge.persistence` | Datos: repositorio de proyectos (MongoDB, archivo o memoria) |
+
+### Cómo se guarda en MongoDB
 
 Un proyecto es un agregado: sus escenas, objetos y componentes no existen por separado. Por eso se guarda como **un documento por proyecto**, con todo anidado:
 
@@ -36,62 +63,7 @@ Un proyecto es un agregado: sus escenas, objetos y componentes no existen por se
 
 Guardar es un `replaceOne` con `upsert` (inserta o reemplaza el documento completo). Leer reconstruye los objetos del dominio usando la misma `ComponentFactory` del editor.
 
-## Qué hace
-
-- **Editor:** proyectos, escenas y objetos. Los objetos se crean a partir de plantillas (jugador, plataforma, moneda, enemigo, pinchos), se arrastran con el ratón y se les agregan o quitan componentes.
-- **Modo juego:** el navegador solo manda las teclas, y el backend calcula la gravedad, los choques, los puntos y si se gana o se pierde. Se gana recogiendo todas las monedas y se pierde al tocar un peligro o al caer fuera de la escena.
-
-## Estructura del repositorio
-
-```
-backend/                        servidor en Java 21 (sin frameworks)
-  run.ps1 · test.ps1 · lib.ps1  compilar y arrancar / pruebas / descarga del driver (Windows)
-  run.sh                        compilar y arrancar (Linux/macOS)
-  src/main/java/com/pixelforge/
-    Main.java                   arma el sistema y abre el servidor
-    domain/                     Project, Scene, GameObject, Vector2, Ids
-    domain/component/           Component y sus subclases, ComponentFactory, FrameContext, InputState
-    runtime/                    GameSession, PhysicsSystem, SessionRegistry, GameStatus
-    application/                EditorController, PlayController, NotFoundException
-    persistence/                ProjectRepository, MongoProjectRepository, ProjectDocumentMapper,
-                                InMemoryProjectRepository, FileProjectRepository
-    web/                        ApiHandler, StaticFileHandler, Request, Json, ViewMapper
-  src/test/java/com/pixelforge/EngineTests.java
-frontend/
-  index.html                    interfaz del editor y del modo juego (HTML + JavaScript)
-diagramas/
-  visual-paradigm/              las vistas de arquitectura hechas en Visual Paradigm
-  fuentes/plantuml/             código PlantUML de cada vista
-  fuentes/xml/                  cada vista en XMI 2.1 (File > Import > XMI en Visual Paradigm)
-```
-
-El backend sirve el frontend: al abrir `http://localhost:8080` entrega `frontend/index.html`, y la página llama a la API en `/api`. Por eso los scripts se ejecutan desde `backend/`.
-
-## Diagramas de arquitectura
-
-| Vista | Archivo |
-|---|---|
-| Contexto | [01_vista_contexto.png](diagramas/visual-paradigm/01_vista_contexto.png) |
-| Funcional (componentes) | [02_vista_funcional.png](diagramas/visual-paradigm/02_vista_funcional.png) |
-| Lógica (aplicación y servicios) | [04_vista_logica_servicios.png](diagramas/visual-paradigm/04_vista_logica_servicios.png) |
-| Desarrollo (paquetes) | [05_vista_desarrollo.png](diagramas/visual-paradigm/05_vista_desarrollo.png) |
-| Despliegue | [06_vista_despliegue.png](diagramas/visual-paradigm/06_vista_despliegue.png) |
-
-## Patrones GRASP
-
-| Patrón | Dónde | Por qué |
-|---|---|---|
-| Experto en información | `GameObject.overlaps`, `GameObject.getComponent`, `Scene.findObject`, `Project.findScene`, `GameSession.step`, `RigidBody` (sabe si está en el suelo) | Cada responsabilidad la cumple la clase que ya tiene los datos para hacerlo. |
-| Creador | `Project.createScene`, `Scene.createObject`, `EditorController.createProject`, `PlayController.start` (crea `GameSession`) | Crea un objeto quien lo contiene, lo registra o tiene los datos para inicializarlo. Por eso los constructores de `Scene` y `GameObject` son de paquete. |
-| Controlador | `EditorController` (caso de uso «Editar juego») y `PlayController` («Jugar escena») | Son el primer objeto después de la interfaz que recibe los eventos del sistema. No hacen el trabajo: delegan en el dominio. |
-| Bajo acoplamiento | `FrameContext`, `ViewMapper`, la inyección por constructor en `Main` | Los componentes no conocen `GameSession`, y el dominio no conoce HTTP, JSON ni archivos. |
-| Alta cohesión | `PhysicsSystem` (solo física), `Json` (solo formato), `Request` (solo leer la petición), `ApiHandler` (solo rutas) | Cada clase tiene una sola responsabilidad. |
-| Polimorfismo | `Component.update`, `copy` y `properties` en las 7 subclases; `ProjectRepository` con tres implementaciones (Mongo, archivo, memoria) | La partida llama `update()` sin preguntar el tipo del componente, y los controladores guardan sin saber si es MongoDB o un archivo. |
-| Fabricación pura | `ComponentFactory`, `PhysicsSystem`, `SessionRegistry`, `ProjectDocumentMapper`, `MongoProjectRepository`, `Json`, `ViewMapper` | Son clases que no existen en el mundo del juego; se inventan para no ensuciar al dominio. |
-| Indirección | `ProjectRepository` (entre los controladores y MongoDB), `ApiHandler` y los controladores (entre el navegador y el dominio) | Un intermediario evita que dos partes dependan directamente la una de la otra. |
-| Variaciones protegidas | `ProjectRepository`, la clase abstracta `Component`, `ComponentFactory` | Pasar de archivo a MongoDB solo cambió `Main` (`createRepository`); agregar un componente solo toca la fábrica. |
-
-## API
+### API REST
 
 Todas las rutas responden JSON. Los datos se envían como formulario (`application/x-www-form-urlencoded`).
 
@@ -110,3 +82,133 @@ Todas las rutas responden JSON. Los datos se envían como formulario (`applicati
 | POST | `.../objects/{o}/components/{tipo}/delete` | quitar componente |
 | POST | `/api/projects/{p}/scenes/{s}/play` | empezar una partida |
 | POST | `/api/sessions/{id}/step` | avanzar un cuadro (`left`, `right`, `jump`) |
+
+---
+
+## Frontend (código fuente)
+
+La carpeta [`frontend/`](frontend/) contiene un solo archivo, [`index.html`](frontend/index.html), con HTML, CSS y JavaScript sin dependencias. Tiene dos modos:
+
+- **Editor:** lista de proyectos y escenas, lienzo (`<canvas>`) donde se arrastran los objetos, y panel de propiedades y componentes del objeto seleccionado.
+- **Modo juego:** captura las teclas, las envía a `/api/sessions/{id}/step` unas 30 veces por segundo y dibuja el estado que devuelve el backend.
+
+El backend sirve esta página: al abrir `http://localhost:8080` entrega `frontend/index.html`, y la página llama a la API en `/api`. No hace falta un servidor aparte ni configurar CORS.
+
+---
+
+## Cómo ejecutarlo
+
+**Requisitos:**
+1. **JDK 21.**
+2. **MongoDB.** Tienes dos opciones:
+   - Instalar [MongoDB Community Server](https://www.mongodb.com/try/download/community). En Windows queda como servicio en `localhost:27017`.
+   - Usar MongoDB Atlas y poner su cadena de conexión antes de arrancar: `$env:MONGODB_URI = "mongodb+srv://usuario:clave@cluster.../"`
+3. **Internet la primera vez.** Los scripts descargan el driver de MongoDB (4 jars) en `backend/lib/`.
+
+```powershell
+cd backend
+.\run.ps1                 # MongoDB en localhost:27017 · abre http://localhost:8080
+.\run.ps1 -Storage file   # sin MongoDB: guarda en backend\data\pixelforge.dat
+.\test.ps1                # 14 pruebas (no necesitan MongoDB encendido)
+```
+
+En Linux o macOS: `cd backend && ./run.sh` (o `./run.sh file`).
+
+Si PowerShell bloquea los scripts, ejecuta primero `Set-ExecutionPolicy -Scope Process Bypass`.
+
+Al arrancar por primera vez se crea el proyecto de ejemplo **"Demo de plataformas"**. Para ver los datos en **MongoDB Compass**, conéctate a `mongodb://localhost:27017` y abre la base `pixelforge`, colección `projects`.
+
+---
+
+## Diagramas
+
+Los diagramas se hicieron en Visual Paradigm. En [`diagramas/visual-paradigm/`](diagramas/visual-paradigm/) están las exportaciones en PNG, y en [`diagramas/fuentes/`](diagramas/fuentes/) los proyectos editables (`.vpp`).
+
+### Vista de contexto (vista de sistema)
+
+Muestra al sistema como un solo proceso y lo que intercambia con cada entidad externa: el diseñador, el jugador, el operador del servidor y MongoDB.
+
+![Vista de contexto](diagramas/visual-paradigm/01_vista_contexto.png)
+
+### Vista funcional (componentes)
+
+Divide el sistema en seis componentes: Interfaz web, API HTTP, Editor, Juego, Modelo del juego y Persistencia. También muestra las interfaces que cada uno **provee** (lollipop) y **requiere** (socket). El Juego usa al Editor para leer la escena, y la Persistencia es la única que habla con MongoDB.
+
+![Vista funcional](diagramas/visual-paradigm/02_vista_funcional.png)
+
+### Vista lógica (aplicación y servicios)
+
+Muestra las clases que atienden las peticiones. `ApiHandler` recibe la petición y la pasa a los controladores `EditorController` y `PlayController`, que guardan a través de la interfaz `ProjectRepository`. Esa interfaz tiene tres implementaciones: MongoDB, memoria y archivo. Aquí se ven las realizaciones, la herencia, la agregación y las dependencias «use» y «create».
+
+![Vista lógica](diagramas/visual-paradigm/04_vista_logica_servicios.png)
+
+### Vista de desarrollo (implementación)
+
+Organiza el código en paquetes de Java (web, application, runtime, domain, domain.component y persistence) y muestra las dependencias de `import` entre ellos y con las librerías externas: el driver de MongoDB y el JDK 21.
+
+![Vista de desarrollo](diagramas/visual-paradigm/05_vista_desarrollo.png)
+
+### Vista de despliegue
+
+Todo corre en el PC del usuario. El navegador se comunica por HTTP en `localhost:8080` con la JVM, que contiene las clases de PixelForge y el servidor HTTP del JDK. La JVM habla con MongoDB por TCP en el puerto 27017 y lee del sistema de archivos el `index.html` y el driver.
+
+![Vista de despliegue](diagramas/visual-paradigm/06_vista_despliegue.png)
+
+| Archivo | Contenido |
+|---|---|
+| [01_vista_contexto.png](diagramas/visual-paradigm/01_vista_contexto.png) | Vista de contexto exportada |
+| [02_vista_funcional.png](diagramas/visual-paradigm/02_vista_funcional.png) | Vista funcional por componentes exportada |
+| [04_vista_logica_servicios.png](diagramas/visual-paradigm/04_vista_logica_servicios.png) | Vista lógica (clases de aplicación y servicios) exportada |
+| [05_vista_desarrollo.png](diagramas/visual-paradigm/05_vista_desarrollo.png) | Vista de desarrollo (paquetes) exportada |
+| [06_vista_despliegue.png](diagramas/visual-paradigm/06_vista_despliegue.png) | Vista de despliegue exportada |
+| [PixelForge Arquitectura.vpp](diagramas/fuentes/PixelForge%20Arquitectura.vpp) | Fuente editable de las vistas de contexto, lógica, desarrollo y despliegue (Visual Paradigm) |
+| [PixelForge Vista funcional.vpp](diagramas/fuentes/PixelForge%20Vista%20funcional.vpp) | Fuente editable de la vista funcional (Visual Paradigm) |
+
+---
+
+## Patrones GRASP aplicados
+
+| Patrón | Dónde | Por qué |
+|---|---|---|
+| Experto en información | `GameObject.overlaps`, `GameObject.getComponent`, `Scene.findObject`, `Project.findScene`, `GameSession.step`, `RigidBody` (sabe si está en el suelo) | Cada responsabilidad la cumple la clase que ya tiene los datos para hacerlo. |
+| Creador | `Project.createScene`, `Scene.createObject`, `EditorController.createProject`, `PlayController.start` (crea `GameSession`) | Crea un objeto quien lo contiene, lo registra o tiene los datos para inicializarlo. Por eso los constructores de `Scene` y `GameObject` son de paquete. |
+| Controlador | `EditorController` (caso de uso «Editar juego») y `PlayController` («Jugar escena») | Son el primer objeto después de la interfaz que recibe los eventos del sistema. No hacen el trabajo: delegan en el dominio. |
+| Bajo acoplamiento | `FrameContext`, `ViewMapper`, la inyección por constructor en `Main` | Los componentes no conocen `GameSession`, y el dominio no conoce HTTP, JSON ni archivos. |
+| Alta cohesión | `PhysicsSystem` (solo física), `Json` (solo formato), `Request` (solo leer la petición), `ApiHandler` (solo rutas) | Cada clase tiene una sola responsabilidad. |
+| Polimorfismo | `Component.update`, `copy` y `properties` en las 7 subclases; `ProjectRepository` con tres implementaciones (Mongo, archivo, memoria) | La partida llama `update()` sin preguntar el tipo del componente, y los controladores guardan sin saber si es MongoDB o un archivo. |
+| Fabricación pura | `ComponentFactory`, `PhysicsSystem`, `SessionRegistry`, `ProjectDocumentMapper`, `MongoProjectRepository`, `Json`, `ViewMapper` | Son clases que no existen en el mundo del juego; se inventan para no ensuciar al dominio. |
+| Indirección | `ProjectRepository` (entre los controladores y MongoDB), `ApiHandler` y los controladores (entre el navegador y el dominio) | Un intermediario evita que dos partes dependan directamente la una de la otra. |
+| Variaciones protegidas | `ProjectRepository`, la clase abstracta `Component`, `ComponentFactory` | Pasar de archivo a MongoDB solo cambió `Main` (`createRepository`); agregar un componente solo toca la fábrica. |
+
+---
+
+## Estructura
+
+```
+├── README.md
+├── backend/                   # Servidor Java 21 + scripts para compilar, ejecutar y probar
+│   ├── run.ps1 · test.ps1 · lib.ps1 · run.sh
+│   └── src/
+│       ├── main/java/com/pixelforge/
+│       │   ├── Main.java      # Arma el sistema y abre el servidor
+│       │   ├── web/           # ApiHandler, StaticFileHandler, Request, Json, ViewMapper
+│       │   ├── application/   # EditorController, PlayController, NotFoundException
+│       │   ├── runtime/       # GameSession, PhysicsSystem, SessionRegistry, GameStatus
+│       │   ├── domain/        # Project, Scene, GameObject, Vector2, Ids
+│       │   │   └── component/ # Component, sus 7 subclases, ComponentFactory, FrameContext, InputState
+│       │   └── persistence/   # ProjectRepository y sus implementaciones, ProjectDocumentMapper
+│       └── test/java/com/pixelforge/EngineTests.java
+├── frontend/
+│   └── index.html             # Editor y modo juego (HTML + JavaScript)
+└── diagramas/
+    ├── visual-paradigm/       # Vistas de arquitectura exportadas en PNG
+    └── fuentes/               # Proyectos editables de Visual Paradigm (.vpp)
+```
+
+---
+
+## Integrantes
+
+- Jesús David Pantoja González
+
+Proyecto académico — Universidad Cooperativa de Colombia, uso educativo.
