@@ -1,0 +1,9 @@
+backend/out/
+backend/data/
+backend/lib/
+*.class
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

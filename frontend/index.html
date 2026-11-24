@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PixelForge · Motor de juegos 2D</title>
+<!--
+  Interfaz del motor. Es solo HTML con un poco de JavaScript: no tiene reglas del juego.
+  Todo lo que pasa (crear, mover, jugar) se le pide al backend Java por la API /api/...
+  y aquí solo se dibuja la respuesta. Así la interfaz y el dominio quedan desacoplados.
+-->
+<style>
+  :root { --bg:#f4f6fa; --panel:#fff; --line:#dfe3ea; --text:#1f2733; --muted:#6b7686; --accent:#3b6fe0; --danger:#c94040; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin:0; font-family: system-ui, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); font-size:14px; }
+  header { display:flex; align-items:center; gap:12px; padding:12px 20px; background:#1f2733; color:#fff; }
+  header h1 { font-size:18px; margin:0; }
+  header small { color:#aab4c3; }
+  main { display:grid; grid-template-columns: 250px 1fr 300px; gap:14px; padding:14px; }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 10px; }
+  h3 { font-size:13px; margin:14px 0 6px; }
+  ul { list-style:none; margin:0 0 10px; padding:0; }
+  li { display:flex; justify-content:space-between; align-items:center; gap:6px; padding:7px 9px; border-radius:7px; cursor:pointer; }
+  li:hover { background:#eef2f9; }
+  li.active { background:#e2eafc; font-weight:600; }
+  li small { color:var(--muted); font-weight:normal; }
+  form { display:grid; gap:6px; margin:0 0 8px; }
+  .row { display:flex; gap:6px; }
+  .row > * { flex:1; min-width:0; }
+  label { font-size:12px; color:var(--muted); display:grid; gap:3px; }
+  input, select { width:100%; padding:7px 8px; border:1px solid var(--line); border-radius:6px; font:inherit; }
+  input[type=color] { padding:2px; height:32px; }
+  button { padding:7px 10px; border:1px solid var(--line); border-radius:6px; background:#fff; cursor:pointer; font:inherit; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.danger { color:var(--danger); }
+  button.link { border:0; padding:2px 6px; background:none; color:var(--danger); }
+  .toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; }
+  .toolbar select, .toolbar input { width:auto; }
+  #stage { width:100%; border:1px solid var(--line); border-radius:8px; display:block; cursor:crosshair; }
+  .hint { color:var(--muted); font-size:12px; margin:8px 0 0; }
+  .status { font-weight:600; }
+  .component { border:1px solid var(--line); border-radius:7px; padding:7px 9px; margin-bottom:6px; }
+  .component header { all:unset; display:flex; justify-content:space-between; font-weight:600; }
+  .component div { color:var(--muted); font-size:12px; }
+  #message { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#1f2733; color:#fff; padding:9px 16px; border-radius:8px; display:none; }
+  #message.error { background:var(--danger); }
+</style>
+</head>
+<body>
+<header><h1>PixelForge</h1><small>Motor de juegos 2D · Diseño de Software</small></header>
+
+<main>
+  <!-- Columna izquierda: proyectos y escenas -->
+  <section>
+    <h2>Proyectos</h2>
+    <ul id="projects"></ul>
+    <form id="newProject"><input name="name" placeholder="Nombre del proyecto" required maxlength="60"><button class="primary">Crear proyecto</button></form>
+
+    <div id="scenesBox" hidden>
+      <h2>Escenas</h2>
+      <ul id="scenes"></ul>
+      <form id="newScene">
+        <input name="name" placeholder="Nombre de la escena" required>
+        <div class="row"><label>Ancho<input name="width" type="number" value="960"></label><label>Alto<input name="height" type="number" value="540"></label></div>
+        <button class="primary">Crear escena</button>
+      </form>
+      <button class="danger" id="deleteProject">Eliminar proyecto</button>
+    </div>
+  </section>
+
+  <!-- Centro: lienzo del editor y del modo juego -->
+  <section>
+    <div class="toolbar" id="editTools">
+      <select id="preset"></select>
+      <input id="objectName" placeholder="Nombre" value="Objeto">
+      <button class="primary" id="addObject">Agregar objeto</button>
+      <button id="playButton">▶ Jugar</button>
+    </div>
+    <div class="toolbar" id="playTools" hidden>
+      <button id="stopButton">■ Volver al editor</button>
+      <span>Puntos: <b id="score">0</b></span>
+      <span>Monedas restantes: <b id="remaining">0</b></span>
+      <span class="status" id="gameStatus"></span>
+    </div>
+    <canvas id="stage" width="960" height="540"></canvas>
+    <p class="hint" id="hint">Elige un proyecto y una escena. Haz clic para seleccionar un objeto y arrástralo para moverlo; haz clic en un espacio vacío para elegir dónde se agrega el siguiente objeto.</p>
+  </section>
+
+  <!-- Columna derecha: escena y objeto seleccionado -->
+  <section>
+    <div id="sceneBox" hidden>
+      <h2>Escena</h2>
+      <form id="sceneForm">
+        <input name="name" placeholder="Nombre">
+        <div class="row"><label>Gravedad<input name="gravity" type="number"></label><label>Fondo<input name="background" type="color"></label></div>
+        <div class="row"><button class="primary">Guardar escena</button><button type="button" class="danger" id="deleteScene">Eliminar</button></div>
+      </form>
+    </div>
+    <div id="objectBox" hidden>
+      <h2>Objeto seleccionado</h2>
+      <form id="objectForm">
+        <input name="name" placeholder="Nombre">
+        <div class="row"><label>X<input name="x" type="number"></label><label>Y<input name="y" type="number"></label></div>
+        <div class="row"><label>Ancho<input name="width" type="number"></label><label>Alto<input name="height" type="number"></label></div>
+        <div class="row"><button class="primary">Guardar</button><button type="button" class="danger" id="deleteObject">Eliminar</button></div>
+      </form>
+      <h3>Componentes</h3>
+      <div id="components"></div>
+      <form id="componentForm">
+        <select name="type" id="componentType"></select>
+        <div id="componentFields"></div>
+        <button>Agregar componente</button>
+      </form>
+    </div>
+  </section>
+</main>
+<div id="message"></div>
+
+<script>
+// ---------- Comunicación con el backend ----------
+// Todas las peticiones pasan por api(); el backend responde JSON o {error: "..."}.
+async function api(method, path, data) {
+  const options = { method };
+  if (data) {
+    options.body = new URLSearchParams(data);
+    options.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+  }
+  const response = await fetch('/api' + path, options);
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || 'Error ' + response.status);
+  return body;
+}
+
+function show(text, isError) {
+  const box = document.getElementById('message');
+  box.textContent = text; box.className = isError ? 'error' : ''; box.style.display = 'block';
+  clearTimeout(show.timer); show.timer = setTimeout(() => box.style.display = 'none', 2600);
+}
+
+// Envuelve cada acción del usuario para mostrar el error que devuelva el servidor.
+const safely = action => async (...args) => { try { await action(...args); } catch (error) { show(error.message, true); } };
+
+// ---------- Estado de la página ----------
+const state = { projectId: null, scene: null, selectedId: null, spawn: { x: 40, y: 40 }, session: null, keys: {} };
+const $ = id => document.getElementById(id);
+const canvas = $('stage'), ctx = canvas.getContext('2d');
+
+// Campos que pide cada tipo de componente al agregarlo (los valores por defecto los pone el backend).
+const COMPONENT_FIELDS = {
+  Sprite: [['color', 'color', '#4c8bf5'], ['shape', 'select:RECT,CIRCLE', 'RECT']],
+  RigidBody: [['gravityScale', 'number', '1']],
+  BoxCollider: [], Hazard: [],
+  PlayerController: [['speed', 'number', '260'], ['jumpSpeed', 'number', '620']],
+  Patrol: [['distance', 'number', '160'], ['speed', 'number', '90']],
+  Collectible: [['points', 'number', '10']]
+};
+const PRESET_NAMES = { player: 'Jugador', platform: 'Plataforma', coin: 'Moneda', enemy: 'Enemigo', spikes: 'Pinchos', empty: 'Vacío' };
+const PRESET_SIZES = { player: [32, 48], platform: [160, 24], coin: [24, 24], enemy: [32, 32], spikes: [64, 20], empty: [48, 48] };
+
+// ---------- Proyectos y escenas ----------
+async function loadProjects() {
+  const projects = await api('GET', '/projects');
+  $('projects').replaceChildren(...projects.map(project => item(
+    project.name, `${project.scenes} escena(s)`, project.id === state.projectId, () => openProject(project.id))));
+}
+
+async function openProject(id) {
+  state.projectId = id; state.scene = null; state.selectedId = null;
+  const project = await api('GET', '/projects/' + id);
+  $('scenesBox').hidden = false;
+  $('scenes').replaceChildren(...project.scenes.map(scene => item(
+    scene.name, `${scene.objects} objeto(s)`, false, () => openScene(scene.id), scene.id)));
+  await loadProjects();
+  if (project.scenes.length) await openScene(project.scenes[0].id);
+  else render();
+}
+
+async function openScene(id) {
+  state.scene = await api('GET', `/projects/${state.projectId}/scenes/${id}`);
+  [...$('scenes').children].forEach(li => li.classList.toggle('active', li.dataset.id === id));
+  const form = $('sceneForm');
+  form.name.value = state.scene.name; form.gravity.value = state.scene.gravity; form.background.value = state.scene.background;
+  $('sceneBox').hidden = false;
+  canvas.width = state.scene.width; canvas.height = state.scene.height;
+  render();
+}
+
+async function refreshScene() {
+  const project = await api('GET', '/projects/' + state.projectId);
+  $('scenes').replaceChildren(...project.scenes.map(scene => item(
+    scene.name, `${scene.objects} objeto(s)`, scene.id === state.scene?.id, () => openScene(scene.id), scene.id)));
+  if (state.scene) await openScene(state.scene.id);
+}
+
+function item(title, detail, active, onClick, id) {
+  const li = document.createElement('li');
+  li.className = active ? 'active' : '';
+  if (id) li.dataset.id = id;
+  li.innerHTML = '<span></span><small></small>';
+  li.firstChild.textContent = title; li.lastChild.textContent = detail;
+  li.onclick = safely(onClick);
+  return li;
+}
+
+// ---------- Dibujo ----------
+function draw(objects, background, selectedId) {
+  ctx.fillStyle = background; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  for (const object of objects) {
+    const sprite = object.components.find(c => c.type === 'Sprite');
+    ctx.fillStyle = sprite ? sprite.properties.color : '#9aa5b1';
+    if (sprite && sprite.properties.shape === 'CIRCLE') {
+      ctx.beginPath();
+      ctx.ellipse(object.x + object.width / 2, object.y + object.height / 2, object.width / 2, object.height / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else ctx.fillRect(object.x, object.y, object.width, object.height);
+    if (object.id === selectedId) {
+      ctx.strokeStyle = '#1f2733'; ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+      ctx.strokeRect(object.x - 3, object.y - 3, object.width + 6, object.height + 6); ctx.setLineDash([]);
+    }
+  }
+}
+
+function render() {
+  if (!state.scene) { ctx.fillStyle = '#e9edf3'; ctx.fillRect(0, 0, canvas.width, canvas.height); $('objectBox').hidden = true; return; }
+  draw(state.scene.objects, state.scene.background, state.selectedId);
+  ctx.strokeStyle = '#1f2733'; ctx.beginPath(); ctx.arc(state.spawn.x, state.spawn.y, 5, 0, Math.PI * 2); ctx.stroke();
+  renderSelected();
+}
+
+// ---------- Objeto seleccionado y componentes ----------
+function selected() { return state.scene?.objects.find(o => o.id === state.selectedId); }
+
+function renderSelected() {
+  const object = selected();
+  $('objectBox').hidden = !object;
+  if (!object) return;
+  const form = $('objectForm');
+  for (const key of ['name', 'x', 'y', 'width', 'height']) form[key].value = object[key];
+  $('components').replaceChildren(...object.components.map(component => {
+    const box = document.createElement('div'); box.className = 'component';
+    const title = document.createElement('header');
+    title.textContent = component.type;
+    const remove = document.createElement('button'); remove.className = 'link'; remove.textContent = 'quitar';
+    remove.onclick = safely(async () => {
+      await api('POST', `${objectPath()}/components/${component.type}/delete`);
+      await refreshScene();
+    });
+    title.append(remove);
+    const detail = document.createElement('div');
+    detail.textContent = Object.entries(component.properties).map(([k, v]) => `${k}: ${v}`).join(' · ') || 'sin propiedades';
+    box.append(title, detail); return box;
+  }));
+}
+
+function objectPath() { return `/projects/${state.projectId}/scenes/${state.scene.id}/objects/${state.selectedId}`; }
+
+function renderComponentFields() {
+  const fields = COMPONENT_FIELDS[$('componentType').value] || [];
+  $('componentFields').replaceChildren(...fields.map(([name, kind, value]) => {
+    const label = document.createElement('label'); label.textContent = name;
+    let control;
+    if (kind.startsWith('select:')) {
+      control = document.createElement('select');
+      kind.slice(7).split(',').forEach(option => control.append(new Option(option, option)));
+    } else { control = document.createElement('input'); control.type = kind; }
+    control.name = name; control.value = value; label.append(control); return label;
+  }));
+}
+
+// ---------- Ratón en el editor: seleccionar, mover y elegir dónde agregar ----------
+let drag = null;
+function pointer(event) {
+  const box = canvas.getBoundingClientRect();
+  return { x: (event.clientX - box.left) * canvas.width / box.width, y: (event.clientY - box.top) * canvas.height / box.height };
+}
+canvas.addEventListener('mousedown', event => {
+  if (!state.scene || state.session) return;
+  const p = pointer(event);
+  const hit = [...state.scene.objects].reverse().find(o => p.x >= o.x && p.x <= o.x + o.width && p.y >= o.y && p.y <= o.y + o.height);
+  state.selectedId = hit ? hit.id : null;
+  if (hit) drag = { object: hit, dx: p.x - hit.x, dy: p.y - hit.y, moved: false };
+  else state.spawn = { x: Math.round(p.x), y: Math.round(p.y) };
+  render();
+});
+canvas.addEventListener('mousemove', event => {
+  if (!drag) return;
+  const p = pointer(event), o = drag.object;
+  o.x = Math.round(Math.min(Math.max(0, p.x - drag.dx), canvas.width - o.width));
+  o.y = Math.round(Math.min(Math.max(0, p.y - drag.dy), canvas.height - o.height));
+  drag.moved = true; render();
+});
+window.addEventListener('mouseup', safely(async () => {
+  if (!drag) return;
+  const { object, moved } = drag; drag = null;
+  if (moved) {
+    await api('POST', `/projects/${state.projectId}/scenes/${state.scene.id}/objects/${object.id}/update`,
+      { name: object.name, x: object.x, y: object.y, width: object.width, height: object.height });
+  }
+}));
+
+// ---------- Formularios del editor ----------
+$('newProject').onsubmit = safely(async event => {
+  event.preventDefault();
+  const project = await api('POST', '/projects', { name: event.target.name.value });
+  event.target.reset(); show('Proyecto creado'); await openProject(project.id);
+});
+$('deleteProject').onclick = safely(async () => {
+  if (!confirm('¿Eliminar el proyecto y todas sus escenas?')) return;
+  await api('POST', `/projects/${state.projectId}/delete`);
+  state.projectId = null; state.scene = null; $('scenesBox').hidden = true; $('sceneBox').hidden = true;
+  await loadProjects(); render();
+});
+$('newScene').onsubmit = safely(async event => {
+  event.preventDefault();
+  const form = event.target;
+  const scene = await api('POST', `/projects/${state.projectId}/scenes`, { name: form.name.value, width: form.width.value, height: form.height.value });
+  form.name.value = ''; await refreshScene(); await openScene(scene.id); await loadProjects();
+});
+$('sceneForm').onsubmit = safely(async event => {
+  event.preventDefault();
+  const form = event.target;
+  await api('POST', `/projects/${state.projectId}/scenes/${state.scene.id}/update`,
+    { name: form.name.value, gravity: form.gravity.value, background: form.background.value });
+  show('Escena guardada'); await refreshScene();
+});
+$('deleteScene').onclick = safely(async () => {
+  if (!confirm('¿Eliminar esta escena?')) return;
+  await api('POST', `/projects/${state.projectId}/scenes/${state.scene.id}/delete`);
+  state.scene = null; $('sceneBox').hidden = true; await openProject(state.projectId);
+});
+$('addObject').onclick = safely(async () => {
+  if (!state.scene) throw new Error('Primero abre una escena');
+  const preset = $('preset').value, [width, height] = PRESET_SIZES[preset];
+  const x = Math.min(state.spawn.x, state.scene.width - width), y = Math.min(state.spawn.y, state.scene.height - height);
+  const object = await api('POST', `/projects/${state.projectId}/scenes/${state.scene.id}/objects`,
+    { name: $('objectName').value || PRESET_NAMES[preset], preset, x, y, width, height });
+  state.selectedId = object.id; await refreshScene();
+});
+$('preset').onchange = () => $('objectName').value = PRESET_NAMES[$('preset').value];
+$('objectForm').onsubmit = safely(async event => {
+  event.preventDefault();
+  const form = event.target;
+  await api('POST', `${objectPath()}/update`,
+    { name: form.name.value, x: form.x.value, y: form.y.value, width: form.width.value, height: form.height.value });
+  show('Objeto guardado'); await refreshScene();
+});
+$('deleteObject').onclick = safely(async () => {
+  await api('POST', `${objectPath()}/delete`);
+  state.selectedId = null; await refreshScene();
+});
+$('componentType').onchange = renderComponentFields;
+$('componentForm').onsubmit = safely(async event => {
+  event.preventDefault();
+  await api('POST', `${objectPath()}/components`, Object.fromEntries(new FormData(event.target)));
+  await refreshScene();
+});
+
+// ---------- Modo juego ----------
+// El navegador solo envía las teclas; el backend calcula física, puntos y si se gana o pierde.
+$('playButton').onclick = safely(async () => {
+  if (!state.scene) throw new Error('Primero abre una escena');
+  state.session = await api('POST', `/projects/${state.projectId}/scenes/${state.scene.id}/play`);
+  $('editTools').hidden = true; $('playTools').hidden = false;
+  $('hint').textContent = 'Flechas ← → para moverte y ↑ o espacio para saltar. Recoge todas las monedas sin tocar a los enemigos.';
+  canvas.focus(); gameLoop();
+});
+$('stopButton').onclick = () => stopGame();
+
+function stopGame() {
+  state.session = null; $('editTools').hidden = false; $('playTools').hidden = true;
+  $('hint').textContent = 'De vuelta en el editor.'; render();
+}
+
+async function gameLoop() {
+  while (state.session) {
+    const started = performance.now();
+    try {
+      const keys = state.keys;
+      state.session = await api('POST', `/sessions/${state.session.id}/step`,
+        { left: !!keys.ArrowLeft, right: !!keys.ArrowRight, jump: !!(keys.ArrowUp || keys[' ']) });
+    } catch (error) { show(error.message, true); stopGame(); return; }
+    const session = state.session;
+    draw(session.objects, session.background, null);
+    $('score').textContent = session.score; $('remaining').textContent = session.remaining;
+    $('gameStatus').textContent = { RUNNING: '', WON: '¡Ganaste!', LOST: 'Perdiste' }[session.status];
+    if (session.status !== 'RUNNING') return;
+    await new Promise(resolve => setTimeout(resolve, Math.max(0, 33 - (performance.now() - started))));
+  }
+}
+window.addEventListener('keydown', event => {
+  if (!state.session) return;
+  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', ' '].includes(event.key)) event.preventDefault();
+  state.keys[event.key] = true;
+});
+window.addEventListener('keyup', event => { state.keys[event.key] = false; });
+
+// ---------- Arranque ----------
+safely(async () => {
+  const catalog = await api('GET', '/catalog');
+  $('preset').replaceChildren(...catalog.presets.map(p => new Option(PRESET_NAMES[p] || p, p)));
+  $('objectName').value = PRESET_NAMES[catalog.presets[0]];
+  $('componentType').replaceChildren(...catalog.componentTypes.map(t => new Option(t, t)));
+  renderComponentFields();
+  await loadProjects();
+  const first = $('projects').firstChild;
+  if (first) first.click();
+  else render();
+})();
+</script>
+</body>
+</html>
