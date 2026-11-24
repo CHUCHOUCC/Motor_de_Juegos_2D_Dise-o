@@ -4,7 +4,9 @@
 
 Motor de juegos 2D de plataformas que funciona en el navegador. El diseñador arma proyectos, escenas y objetos, y les agrega componentes como física, colisiones, controles o puntos. Después prueba la escena en modo juego, y el backend es quien calcula la gravedad, los choques y el resultado de la partida.
 
-> **Estado:** análisis, diseño (5 vistas de arquitectura) e implementación **completos**. Se ejecuta en local o desplegado en Render con MongoDB Atlas (ver [Despliegue](#despliegue-en-la-nube-render--mongodb-atlas)).
+> **Estado:** análisis, diseño (5 vistas de arquitectura) e implementación **completos y desplegados**.
+> - **Aplicación en línea:** https://pixelforge-juur.onrender.com (no hay que instalar nada; la primera carga puede tardar cerca de un minuto si el servicio estaba dormido).
+> - **API:** https://pixelforge-juur.onrender.com/api/catalog
 > - **Backend:** Java 21 con Spring Boot 4.2, en [`backend/`](backend/).
 > - **Frontend:** HTML + JavaScript, en [`frontend/`](frontend/).
 > - **Base de datos:** MongoDB (local o Atlas).
@@ -146,7 +148,7 @@ Navegador ──HTTPS──▶ Render (Docker: pixelforge.jar + frontend/) ─�
 
 1. En Render: *New → Blueprint* y conectar este repositorio de GitHub. Render lee `render.yaml`.
 2. Cuando pida `MONGODB_URI`, pegar la cadena de Atlas y aplicar.
-3. Esperar el primer build (unos minutos: descarga Maven, compila y corre las pruebas). La URL queda como `https://pixelforge-xxxx.onrender.com`.
+3. Esperar el primer build (unos minutos: descarga Maven, compila y corre las pruebas). La URL de este despliegue es **https://pixelforge-juur.onrender.com**.
 
 Cada `git push` a `main` vuelve a desplegar solo (`autoDeploy: true`).
 
